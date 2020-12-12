@@ -34,7 +34,7 @@ class BitVec:
             else:
                 bv.val = int('0b'+bs[stop:start+1:step], base=2)
             return bv
-
+    
     def __repr__(self):
         return "0b"+str(bin(self.val))[2:].zfill(self.size) #return bin(self.val)
 
@@ -66,7 +66,12 @@ class BitVec:
             num -= lhs.val 
             counter+=1
         return BitVec(size, val=counter)
-  
+    
+    def fast_div(self, lhs):
+        size = max([self.size, lhs.size])
+        val = self.val // lhs.val
+        return BitVec(size, val)
+        
     def __mod__ (self, lhs):
         size = max([self.size, lhs.size])
         num = self.val 
@@ -76,6 +81,11 @@ class BitVec:
             counter+=1
         return BitVec(size, val=num)
 
+    def fast_mod(self, lhs):
+        size = max([self.size, lhs.size])
+        val = self.val % lhs.val
+        return BitVec(size, val)
+    
     def __lshift__(self, lhs):
         size = self.size
         val = (self.val << lhs.val)
@@ -85,7 +95,17 @@ class BitVec:
         size = self.size
         val = (self.val >> lhs.val)
         return BitVec(size, val)
-        
+
+    def clshift(self, lhs):
+        size = self.size 
+        val = (self.val << lhs.val)|(self.val >> (size - lhs.val)) 
+        return BitVec(size, val)
+
+    def crshift(self, lhs):
+        size = self.size
+        val  = (self.val >> lhs.d) | (self.val << (size - lhs.val)) & ((2**size)-1)
+        return BitVec(size, val) 
+    
     def __and__(self, lhs):
         size = max([self.size, lhs.size])
         val = self.val & lhs.val
@@ -166,6 +186,3 @@ class BitVec:
     #    c[...] = 0x10 #Option 1
     #    c.v    = 0x10 #add an attr v and write setattr for that
     #    c[_]   = 0x10 #similar to first option; but declare a variable _ in the library
-
-
-

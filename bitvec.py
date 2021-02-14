@@ -1,29 +1,56 @@
+from typing import Union
+print("imported..")
+
 class BitVec:
-    def __init__(self, size, val=0):
+    def __init__(self, size = 32, val = 0, signed = False):
         if(type(val)==BitVec):
             self.val = val.val
-        else: self.val = val & ((1 << size) - 1) if val>=0 else (val+2**size) & ((1<<size) - 1)
-        self.size = size
+        else: self.val = val & ((1 << size) - 1) if val>=0 else (val+2**size) & ((1<<size) - 1)#; self.signed = True
+        self.size   = size
+        self.signed = signed
+
+    def set_val(self, val):
+        self.val = ((1<<self.size)-1) & val
+
+    @classmethod
+    def assign(cls, lhs, rhs):
+        if isinstance(rhs, BitVec):
+            pass
+        elif isinstance(rhs, int):
+            rhs = BitVec(rhs.bit_length(), rhs)
+        else:
+            raise TypeError(f"RHS should be either int or BitVec")
+        if isinstance(lhs, BitVec):
+            lhs[...] = rhs
+        elif isinstance(lhs, tuple):
+            shift = 0
+            for i, v in enumerate(reversed(lhs)):
+                v.set_val(rhs.val>>shift)
+                shift = v.size
 
     def __getitem__(self, index):
         if(type(index) == int):
             if(index>self.size-1):
                 raise ValueError(f"index {index} > size-1 {self.size-1}")
             else:
-                return self.val >> index
-        elif(type(index) == slice):
+                return BitVec(1, self.val >> index)
+        elif isinstance(index, slice):
             start, stop, step = index.start, index.stop, index.step
             
             start = self.size if start is None else start
             stop = 0 if stop is None else stop
             step = 1 if step is None else step
 
+            if step<0:
+                start, stop = stop, start
+                step = -step
+
             if start<stop:
                 start, stop = stop, start
                 rev = 1
             else: rev = 0
 
-            bv = BitVec((start-stop)//step, 0)
+            bv = BitVec((start-stop+1)//step, 0)
             bs = bin(self.val)[2::]
 
             if(len(bs) < self.size):
@@ -34,55 +61,94 @@ class BitVec:
             else:
                 bv.val = int('0b'+bs[stop:start+1:step], base=2)
             return bv
-        
+    
+
     # represent method
     def __repr__(self):
-        return "0b"+str(bin(self.val))[2:].zfill(self.size) #return bin(self.val)
-    
+        string_val = str(bin(self.val))[2:].zfill(self.size)
+        if(self.signed == True): #if_signed
+            if(string_val[0] == "1" ): #if_negative
+                value = 2**self.size - self.val
+                return "-"+str(self.size) + "b" + str(bin(value))[2:].zfill(self.size)
+            else:
+                return str(self.size) + "b" + string_val 
+        else:
+            return str(self.size) + "b" + string_val
+
     #add method
     def __add__(self, lhs):
-        size = max([self.size, lhs.size])
-        val = (self.val + lhs.val)
-        return BitVec(size, val)
-    
+        if(isinstance(lhs, int)):
+            size = max([self.size, lhs.bit_length()]) + 1
+            val = (self.val + lhs)
+        else:
+            size = max([self.size, lhs.size]) + 1
+            val = (self.val + lhs.val)
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
+
     # inplace add method
     def __iadd__(self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = (self.val + lhs) & ((1<<size) - 1)
         else:
             val = (self.val + lhs.val) & ((1<<size) - 1)
-        return BitVec(size, val)
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
 
     #sub method
     def __sub__(self, lhs):
-        size = max([self.size, lhs.size])
-        val = (self.val + ~lhs.val+1)
-        return BitVec(size, val)
+        if(isinstance(lhs, int)):
+            size = max([self.size, lhs.bit_length()]) + 1
+            val = (self.val + ~lhs+1)
+        else:
+            size = max([self.size, lhs.size]) + 1
+            val = (self.val + ~lhs.val+1)
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
 
     #inplace sub method
     def __isub__(self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = (self.val + ~lhs+1) 
         else:
             val = (self.val + ~lhs.val+1) 
-        return BitVec(size, val)
-    
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
+
     #mul method
     def __mul__(self, lhs):
-        val = (self.val * lhs.val)
-        size = val.bit_length()
-        return BitVec(size, val)
-           
+        if(isinstance(lhs, int)):
+            val = (self.val * lhs)
+            size = val.bit_length()
+        else:
+            val = (self.val * lhs.val)
+            size = val.bit_length()
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
+
     #inplace mul method        
     def __imul__(self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = self.val * lhs & ((1<<size) - 1)
         else:
             val = self.val * lhs.val & ((1<<size) - 1)
-        return BitVec(size, val)
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
     
     #power method
     def __pow__(self, lhs):
@@ -95,31 +161,41 @@ class BitVec:
         val = (self.val ** lhs.val) &((1<<size) - 1)
         return BitVec(size, val)
 
-    #div method
+    #div method     --- neg number pending
     def __truediv__ (self, lhs):
-        size = max([self.size, lhs.size])
-        val = self.val // lhs.val
-        return BitVec(size, val)
+        if isinstance(lhs, int):
+            size = max([self.size, lhs.bit_length()])
+            val = self.val // lhs 
+        else:
+            size = max([self.size, lhs.size])
+            val = self.val // lhs.val
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
 
     #inplace div method
     def __itruediv__ (self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = self.val // lhs
         else:
             val = self.val // lhs.val
         return BitVec(size, val)
 
-    #modulo method
+    #modulo method   --- neg number pending
     def __mod__ (self, lhs):
         size = max([self.size, lhs.size])
-        val = self.val % lhs.val
+        if isinstance(lhs, int):
+            val = self.val % lhs
+        else:
+            val = self.val % lhs.val
         return BitVec(size, val)
     
     #inplace modulo method
     def __imod__ (self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = self.val % lhs
         else:
             val = self.val % lhs.val
@@ -128,7 +204,7 @@ class BitVec:
     #left shift method
     def __lshift__(self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = self.val << lhs
         else:
             val = (self.val << lhs.val)
@@ -136,7 +212,7 @@ class BitVec:
         
     def __ilshift__(self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = self.val << lhs
         else:
             val = (self.val << lhs.val)
@@ -145,7 +221,7 @@ class BitVec:
     # right shift method        
     def __rshift__(self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = self.val >> lhs
         else:
             val = (self.val >> lhs.val)
@@ -154,7 +230,7 @@ class BitVec:
     # circular left shift method
     def clshift(self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = (self.val << lhs%size)|(self.val >> (size - lhs%size)) 
         else:
             val = (self.val << lhs.val%size)|(self.val >> (size - lhs.val%size)) 
@@ -162,7 +238,7 @@ class BitVec:
     
     def __irshift__(self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = self.val >> lhs
         else:
             val = (self.val >> lhs.val)
@@ -171,7 +247,7 @@ class BitVec:
     #circular right shift method
     def crshift(self, lhs):
         size = self.size
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             val = (self.val >> lhs%size) | (self.val << (size - lhs%size)) 
         else:
             val = (self.val >> lhs.val%size) | (self.val << (size - lhs.val%size)) 
@@ -179,58 +255,105 @@ class BitVec:
 
     # bitwise and method
     def __and__(self, lhs):
+        if(isinstance(lhs, int)):
+            lhs = BitVec(lhs, lhs.bit_length())
         size = max([self.size, lhs.size])
         val = self.val & lhs.val
-        return BitVec(size, val)
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
     
     def __iand__(self, lhs):
+        if(isinstance(lhs, int)):
+            lhs = BitVec(lhs, lhs.bit_length())
         size = self.size
         val = self.val & lhs.val
-        return BitVec(size, val)
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
     
     #bitwise or method
     def __or__(self, lhs):
+        if(isinstance(lhs, int)):
+            lhs = BitVec(lhs, lhs.bit_length())
         size = max([self.size, lhs.size])
         val = self.val | lhs.val 
-        return BitVec(size,val)
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
     
     def __ior__(self, lhs):
+        if(isinstance(lhs, int)):
+            lhs = BitVec(lhs, lhs.bit_length())
         size = self.size
         val = self.val | lhs.val 
-        return BitVec(size,val)
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
     
     #bitwise XOR method
     def __xor__(self, lhs):
+        if(isinstance(lhs, int)):
+            lhs = BitVec(lhs, lhs.bit_length())
         size = max([self.size, lhs.size])
         val = self.val ^ lhs.val 
-        return BitVec(size,val)
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
+
     
     def __ixor__(self, lhs):
+        if(isinstance(lhs, int)):
+            lhs = BitVec(lhs, lhs.bit_length())
         size = self.size
         val = self.val ^ lhs.val 
-        return BitVec(size,val)
+        try:
+            return BitVec(size = size, val = val, signed = self.signed | lhs.signed)
+        except:
+            return BitVec(size = size, val = val, signed = self.signed)
     
     # invert method
     def __invert__(self):
         size = self.size
         val = ~self.val  
-        return BitVec(size,val)
+        return BitVec(size = size, val = val, signed = self.signed )
     
     #to_hex convert method
     def hex(self):
-        return hex(self.val)
+        string_val = str(bin(self.val))[2:].zfill(self.size)
+        if(self.signed == True): #if_signed
+            if(string_val[0]=="1"):#if_negative
+                value = 2**self.size - self.val
+                return "-" + str(self.size) + "h" + hex(value)[2:]
+            else:
+                return str(self.size) + "h" + hex(self.val)[2:]
+        else:
+            return str(self.size) + "h" + hex(self.val)[2:]
 
     #to_dec convert method
     def dec(self):
-        return str(self.val)
+        string_val = str(bin(self.val))[2:].zfill(self.size)
+        if(self.signed == True): #if_signed
+            if(string_val[0]=="1"):#if_negative
+                value = 2**self.size - self.val
+                return  "-" + str(value)
+            else:
+                return str(self.val)
+        else:
+            return str(self.val)
 
     #to_bin convert method
     def bin(self):
-        return bin(self.val())
+            return str(self.size) + "b" + bin(self.val)[2:]
 
     #equal to 
     def __eq__(self, lhs):
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             bool_var = self.val == lhs
         else:
             bool_var = (self.val == lhs.val)
@@ -238,7 +361,7 @@ class BitVec:
    
     #less than
     def __lt__(self, lhs):
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             bool_var = self.val < lhs
         else:
             bool_var = (self.val < lhs.val)
@@ -246,7 +369,7 @@ class BitVec:
 
     #less than or equal
     def __le__(self, lhs):
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             bool_var = self.val <= lhs
         else:
             bool_var = self.val <= lhs.val 
@@ -254,7 +377,7 @@ class BitVec:
     
     #not equal to
     def __ne__(self, lhs):
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             bool_var = self.val != lhs
         else:
             bool_var = self.val != lhs.val 
@@ -262,7 +385,7 @@ class BitVec:
 
     #greater than
     def __gt__(self, lhs):
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             bool_var = self.val > lhs
         else:
             bool_var = self.val > lhs.val 
@@ -270,7 +393,7 @@ class BitVec:
 
     #greater than equal
     def __ge__(self, lhs):
-        if(type(lhs) is int):
+        if isinstance(lhs, int):
             bool_var = self.val >= lhs
         else:
             bool_var = self.val >= lhs.val
@@ -284,9 +407,8 @@ class BitVec:
         ex: a:BitVec and b:BitVec
         2@a #Repeat a or concatenate a with itself
         a@b #concat a with b
-
         '''
-        if (type(lhs)==int):
+        if isinstance(lhs, int):
             v = self.val
             for i in range(lhs):
                 v = (v<<self.size) | self.val
@@ -300,32 +422,57 @@ class BitVec:
         return self@rhs;
 
 
-    #TODO: Complete the implementation of set
-    #def __setitem__(self, index, val):
-    #    if(type(index) == int):
-    #        if(index>self.size-1):
-    #            raise ValueError(f"index {index} > size-1 {self.size-1}")
-    #        else:
-    #            self.val = ((1 << index) | self.val) if val else (~(1 << index) & self.val) 
-    #    if(type(index)==slice):
-    #        start, stop, step = index.start, index.stop, index.step
-    #        if(step!=None or step!=1):
-    #            raise IndexError("Cannot set discontinuous slice")
-    #        else:
-    #            subs, ln = val.val, val.size #assuming it's bitveca
-    #            ln1 = stop - start + 1
+    def __setitem__(self, index, val):
+        if isinstance(val, int): val = BitVec(val.bit_length(), val)
+        elif not isinstance(val, BitVec): raise TypeError(f"Expected RHS to be either BitVec or int; got {type(val)}")
+        if isinstance(index, int):
+            if index>(self.size-1):
+                raise IndexError(f"Index {index} out of range; size of the vector is {self.size}")
+            else:
+                self.val = (self.val | (val[0]<<index)) if val[0]==1 else (self.val & ~(val[0]<<index))
+        elif isinstance(index, slice):
+            start, stop, step = index.start, index.stop, index.step
+            if start is None: start = self.size-1
+            if stop is None: stop = 0
+            if not step is None:
+                raise IndexError(f"Step is not supported in BitVector set")
+            else:
+                if start>=stop: start1, stop1 = start, stop
+                else: start1, stop1 = stop, start
+                mask = ((1<<(start1-stop1+1))-1)<<stop1
+                val_pshd = val[start1-stop1:0] if val.size>=(start1-stop1+1) else BitVec((start1-stop1+1-val.size), 0x0)@val
+                if start<stop: val_pshd = val_pshd[::-1]
+                val_pshd = BitVec(val_pshd.size+stop1, val_pshd)<<stop1
+                mask = BitVec(self.size, mask)
+                self.val = ((~mask&self)|val_pshd).val
+        elif index is Ellipsis:
+            self.val = ((1<<self.size)-1) & val.val
+        else: raise IndexError(f"Index of type {type(index)} not expected")
+    
+    def __iter__(self):
+        for i in range(self.size):
+            yield self[i]
 
-    #TODO: Complete the implementation for the following
-    #Operators to be supported
-    # +,-,/,*,**, |, &, ^, ~, <<, >>
 
-    #Other implementation details
-    #Let the results of operations be computed for highest available width and then reduced 
-    #Further add implementation such that one is able to assign to declared vector
-    #Ex: c = bv(32) #declare 32 biit vector
-    #    c[...] = 0x10 #Option 1
-    #    c.v    = 0x10 #add an attr v and write setattr for that
-    #    c[_]   = 0x10 #similar to first option; but declare a variable _ in the library
+class Concat:
+    def __init__(self, *vecs:BitVec) -> None:
+        self.__vec_list = list(vecs)
 
-
-
+    def __getattribute__(self, name: str) -> BitVec:
+        if name == "size":
+            size = 0
+            for v in self.__vec_list:
+                size += v.size
+            return size
+        elif name == "val":
+            vec = BitVec(0, 0)
+            for v in self.__vec_list:
+                vec = vec @ v
+            return vec.val
+        elif name == "vec":
+            vec = BitVec(0, 0)
+            for v in self.__vec_list:
+                vec = vec @ v
+            return vec
+        else:
+            raise AttributeError(f"Attribute {name} doesn't exist")
